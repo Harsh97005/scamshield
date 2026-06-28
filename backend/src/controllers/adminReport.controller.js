@@ -73,3 +73,23 @@ export async function approveReport(req, res, next) {
     return next(err);
   }
 }
+
+/**
+ * PATCH /api/v1/admin/reports/:reportId/reject
+ * API Contract §8.4 — Admin only.
+ *
+ * Body (all optional):
+ *   adminNotes {string} — moderator note to attach to the report
+ */
+export async function rejectReport(req, res, next) {
+  try {
+    const result = await adminReportService.rejectReport(
+      req.params.reportId,
+      req.body.adminNotes,
+    );
+
+    return sendSuccess(res, { statusCode: 200, data: result });
+  } catch (err) {
+    return next(err);
+  }
+}

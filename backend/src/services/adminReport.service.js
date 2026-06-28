@@ -176,3 +176,60 @@ export async function approveReport(reportId, adminNotes) {
 
   return report.toAdminJSON();
 }
+
+// ---------------------------------------------------------------------------
+// rejectReport
+// API Contract §8.4  PATCH /admin/reports/:reportId/reject
+// ---------------------------------------------------------------------------
+
+/**
+ * Reject a pending report.
+ *
+ * Preconditions:
+ *  - Report must exist — throws 404 NOT_FOUND otherwise.
+ *  - reportStatus must be 'pending' — throws 409 CONFLICT for any other
+ *    status so admins cannot double-reject or reject an approved report.
+ *
+ * Mutations (this sprint only):
+ *  - reportStatus → 'rejected'
+ *  - adminNotes   → saved if provided, left unchanged if omitted
+ *
+ * Explicitly deferred (future sprints):
+ *  - Identifier.reputationScore update
+ *  - User credibilityTier recalculation
+ *  - Notification to reporter
+ *
+ * @param {string}           reportId
+ * @param {string|undefined} adminNotes — optional moderator note
+ * @returns {Promise<object>} report.toAdminJSON()
+ * @throws {ApiError} 404 NOT_FOUND  — report does not exist
+ * @throws {ApiError} 409 CONFLICT   — report is not in 'pending' status
+ */
+export async function rejectReport(reportId, adminNotes) {
+  const report = await Report.findById(reportId).select('+adminNotes');
+
+  if (!report) {
+    throw new ApiError(404, 'NOT_FOUND', 'Report not found');
+  }
+
+  if (report.reportStatus !== REPORT_STATUSES.PENDING) {
+    throw new ApiError(
+      409,
+      'CONFLICT',
+      `Report cannot be rejected because its current status is '${report.reportStatus}'. Only 'pending' reports can be rejected.`,
+    );
+  }
+
+  report.reportStatus = REPORT_STATUSES.REJECTED;
+
+  if (adminNotes !== undefined && adminNotes !== null) {
+    report.adminNotes = adminNotes;
+  }
+
+  await report.save();
+
+  await report.populate('identifier');
+  await report.populate('reporter', 'name email');
+
+  return report.toAdminJSON();
+}
