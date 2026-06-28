@@ -9,8 +9,9 @@ import { sendSuccess } from '../utils/apiResponse.js';
  * standard response envelope via sendSuccess().
  *
  * Endpoints:
- *   POST /reports            → submit
- *   GET  /reports/:reportId  → getById
+ *   POST /reports       → submit
+ *   GET  /reports/me    → getMyReports
+ *   GET  /reports/:reportId → getById
  */
 
 /**
@@ -36,6 +37,30 @@ export async function submit(req, res, next) {
     });
 
     return sendSuccess(res, { statusCode: 201, data: report });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+/**
+ * GET /api/v1/reports/me
+ * API Contract §4.3 — Requires authentication.
+ *
+ * userId sourced from req.user.userId — never from query or body.
+ * page, limit, status sourced from req.query.
+ */
+export async function getMyReports(req, res, next) {
+  try {
+    const { page, limit, status } = req.query;
+
+    const result = await reportService.getMyReports({
+      userId: req.user.userId,
+      page,
+      limit,
+      status,
+    });
+
+    return sendSuccess(res, { statusCode: 200, data: result });
   } catch (err) {
     return next(err);
   }

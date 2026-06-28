@@ -1,6 +1,7 @@
 import { Report } from '../models/Report.js';
 import { findOrCreateIdentifier } from './identifier.service.js';
 import { ApiError } from '../utils/apiResponse.js';
+import { REPORT_STATUSES } from '../constants/reports.js';
 
 /**
  * Report Service.
@@ -103,4 +104,79 @@ export async function getReportById(reportId) {
   }
 
   return report.toPublicJSON();
+}
+
+// ---------------------------------------------------------------------------
+// getMyReports
+// API Contract §4.3  GET /reports/me
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch paginated reports submitted by the authenticated user.
+ *
+ * Filtering:
+ *  - reporter is always scoped to the authenticated userId — users can only
+ *    see their own reports through this endpoint.
+ *  - status filter is optional; when omitted all statuses are returned.
+ *    Valid values are sourced from REPORT_STATUSES to prevent arbitrary
+ *    query injection.
+ *
+ * Pagination:
+ *  - page  : 1-indexed; defaults to 1.
+ *  - limit : results per page; defaults to 10, capped at 50.
+ *
+ * Sort: createdAt descending (newest first) — consistent with the
+ * idx_createdAt_desc index on the Reports collection.
+ *
+ * adminNotes is never returned — toPublicJSON() excludes it.
+ *
+ * @param {{
+ *   userId: string,
+ *   page:   number,
+ *   limit:  number,
+ *   status: string | undefined,
+ * }} dto
+ * @returns {Promise<{ reports: object[], pagination: object }>}
+ */
+export async function getMyReports({ userId, page, limit, status }) {
+  // Sanitize pagination inputs.
+  const pageNum  = Math.max(1, parseInt(page, 10)  || 1);
+  const limitNum = Math.min(50, Math.max(1, parseInt(limit, 10) || 10));
+  const skip     = (pageNum - 1) * limitNum;
+
+  // Build query filter.
+  const filter = { reporter: userId };
+
+  if (status !== undefined) {
+    // Guard against values outside the known enum.
+    if (!Object.values(REPORT_STATUSES).includes(status)) {
+      throw new ApiError(
+        400,
+        'VALIDATION_ERROR',
+        `Invalid status filter. Must be one of: ${Object.values(REPORT_STATUSES).join(', ')}`,
+      );
+    }
+    filter.reportStatus = status;
+  }
+
+  // Run count and find in parallel for efficiency.
+  const [total, reports] = await Promise.all([
+    Report.countDocuments(filter),
+    Report.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitNum),
+  ]);
+
+  return {
+    reports: reports.map((r) => r.toPublicJSON()),
+    pagination: {
+      total,
+      page:       pageNum,
+      limit:      limitNum,
+      totalPages: Math.ceil(total / limitNum),
+      hasNext:    pageNum < Math.ceil(total / limitNum),
+      hasPrev:    pageNum > 1,
+    },
+  };
 }

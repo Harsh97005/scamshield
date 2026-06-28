@@ -23,6 +23,24 @@ router.post(
 );
 
 /**
+ * GET /api/v1/reports/me
+ * API Contract §4.3 — Authenticated users only.
+ *
+ * IMPORTANT: /me must be registered BEFORE /:reportId so Express does not
+ * treat the literal string "me" as a reportId parameter.
+ *
+ * Query params (all optional):
+ *   page   {number}  — page number, 1-indexed (default: 1)
+ *   limit  {number}  — results per page, max 50 (default: 10)
+ *   status {string}  — filter by reportStatus (pending | approved | rejected | info_requested)
+ */
+router.get(
+  '/me',
+  authenticate,
+  reportController.getMyReports,
+);
+
+/**
  * GET /api/v1/reports/:reportId
  * API Contract §4.2 — Public, no auth required.
  *
