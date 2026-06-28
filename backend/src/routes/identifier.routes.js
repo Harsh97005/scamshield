@@ -25,6 +25,26 @@ router.get(
 );
 
 /**
+ * GET /api/v1/identifiers/:identifierId/reports
+ * API Contract §3.3 — Public, no auth required.
+ *
+ * IMPORTANT: registered before /:identifierId so Express does not swallow
+ * the nested path — without this order, /identifiers/abc123/reports would
+ * match /:identifierId with identifierId="abc123" and never reach this handler.
+ *
+ * Query params (all optional):
+ *   page  {number} — page number, 1-indexed (default: 1)
+ *   limit {number} — results per page, max 50 (default: 10)
+ *
+ * Returns only APPROVED reports — pending/rejected/info_requested are
+ * internal moderation state and are never exposed on this public endpoint.
+ */
+router.get(
+  '/:identifierId/reports',
+  identifierController.getIdentifierReports,
+);
+
+/**
  * GET /api/v1/identifiers/:identifierId
  * API Contract §3.2 — Public, no auth required.
  *

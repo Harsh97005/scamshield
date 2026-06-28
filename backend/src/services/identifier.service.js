@@ -1,4 +1,6 @@
 import { Identifier } from '../models/Identifier.js';
+import { Report } from '../models/Report.js';
+import { REPORT_STATUSES } from '../constants/reports.js';
 import { normalizeIdentifier } from '../utils/identifierNormalizer.js';
 import { ApiError } from '../utils/apiResponse.js';
 
@@ -116,4 +118,73 @@ export async function findOrCreateIdentifier({ type, value }) {
   );
 
   return identifier;
+}
+
+// ---------------------------------------------------------------------------
+// Public — getIdentifierReports
+// API Contract §3.3  GET /identifiers/:identifierId/reports
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch paginated approved reports for a given identifier.
+ *
+ * Only APPROVED reports are returned — pending, rejected, and info_requested
+ * reports are internal moderation state and must never be exposed publicly.
+ *
+ * reporter is an ObjectId reference; it is NOT populated here so that
+ * no user PII (email, name) is ever leaked through this public endpoint.
+ * toPublicJSON() returns reporter as a raw ObjectId only.
+ *
+ * adminNotes is select:false on the Report schema — it is excluded
+ * automatically without any explicit projection needed.
+ *
+ * Sort: createdAt descending (newest first), consistent with idx_createdAt_desc.
+ *
+ * @param {{
+ *   identifierId: string,
+ *   page:         number,
+ *   limit:        number,
+ * }} dto
+ * @returns {Promise<{ reports: object[], pagination: object }>}
+ * @throws {ApiError} 404 NOT_FOUND if the identifier does not exist
+ */
+export async function getIdentifierReports({ identifierId, page, limit }) {
+  // Confirm the identifier exists before querying reports.
+  // findById handles malformed ObjectId — Mongoose throws CastError which
+  // the global error handler maps to 400.
+  const identifier = await Identifier.findById(identifierId);
+
+  if (!identifier) {
+    throw new ApiError(404, 'NOT_FOUND', 'Identifier not found');
+  }
+
+  // Sanitize pagination inputs.
+  const pageNum  = Math.max(1, parseInt(page, 10)  || 1);
+  const limitNum = Math.min(50, Math.max(1, parseInt(limit, 10) || 10));
+  const skip     = (pageNum - 1) * limitNum;
+
+  const filter = {
+    identifier:   identifier._id,
+    reportStatus: REPORT_STATUSES.APPROVED,
+  };
+
+  const [total, reports] = await Promise.all([
+    Report.countDocuments(filter),
+    Report.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitNum),
+  ]);
+
+  return {
+    reports: reports.map((r) => r.toPublicJSON()),
+    pagination: {
+      total,
+      page:       pageNum,
+      limit:      limitNum,
+      totalPages: Math.ceil(total / limitNum),
+      hasNext:    pageNum < Math.ceil(total / limitNum),
+      hasPrev:    pageNum > 1,
+    },
+  };
 }
