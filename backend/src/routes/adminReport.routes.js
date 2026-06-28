@@ -27,11 +27,31 @@ router.get(
 );
 
 /**
+ * PATCH /api/v1/admin/reports/:reportId/approve
+ * API Contract §8.3 — Admin only.
+ *
+ * Registered BEFORE GET /:reportId to prevent Express treating 'approve'
+ * as a reportId param in a nested path collision.
+ *
+ * Transitions reportStatus from 'pending' → 'approved'.
+ * Throws 409 CONFLICT if current status is not 'pending'.
+ *
+ * Body (all optional):
+ *   adminNotes {string} — moderator note to attach to the report
+ */
+router.patch(
+  '/:reportId/approve',
+  authenticate,
+  authorize(ROLES.ADMIN),
+  adminReportController.approveReport,
+);
+
+/**
  * GET /api/v1/admin/reports/:reportId
  * API Contract §8.2 — Admin only.
  *
- * Registered AFTER GET / so Express matches the parameterised route
- * only when no earlier static segment has matched.
+ * Registered AFTER PATCH /:reportId/approve and AFTER GET / so Express
+ * matches more specific paths first.
  *
  * Returns full report detail including adminNotes.
  * Malformed ObjectId → 400 via global CastError handler (Sprint 1).

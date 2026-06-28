@@ -114,3 +114,65 @@ export async function getPendingReportById(reportId) {
 
   return report.toAdminJSON();
 }
+
+// ---------------------------------------------------------------------------
+// approveReport
+// API Contract §8.3  PATCH /admin/reports/:reportId/approve
+// ---------------------------------------------------------------------------
+
+/**
+ * Approve a pending report.
+ *
+ * Preconditions:
+ *  - Report must exist — throws 404 NOT_FOUND otherwise.
+ *  - reportStatus must be 'pending' — throws 409 CONFLICT for any other
+ *    status so admins cannot double-approve or approve a rejected report.
+ *
+ * Mutations (this sprint only):
+ *  - reportStatus → 'approved'
+ *  - adminNotes   → saved if provided, left unchanged if omitted
+ *
+ * Explicitly deferred (future sprints):
+ *  - Identifier.reputationScore update
+ *  - Identifier.approvedReports counter increment
+ *  - Identifier.lastReportedAt update
+ *  - User.approvedReportCount increment
+ *  - User credibilityTier recalculation
+ *  - Notification to reporter
+ *
+ * @param {string}           reportId
+ * @param {string|undefined} adminNotes — optional moderator note
+ * @returns {Promise<object>} report.toAdminJSON()
+ * @throws {ApiError} 404 NOT_FOUND  — report does not exist
+ * @throws {ApiError} 409 CONFLICT   — report is not in 'pending' status
+ */
+export async function approveReport(reportId, adminNotes) {
+  const report = await Report.findById(reportId).select('+adminNotes');
+
+  if (!report) {
+    throw new ApiError(404, 'NOT_FOUND', 'Report not found');
+  }
+
+  if (report.reportStatus !== REPORT_STATUSES.PENDING) {
+    throw new ApiError(
+      409,
+      'CONFLICT',
+      `Report cannot be approved because its current status is '${report.reportStatus}'. Only 'pending' reports can be approved.`,
+    );
+  }
+
+  report.reportStatus = REPORT_STATUSES.APPROVED;
+
+  if (adminNotes !== undefined && adminNotes !== null) {
+    report.adminNotes = adminNotes;
+  }
+
+  await report.save();
+
+  // Re-populate after save so the returned document mirrors what
+  // getPendingReportById() would return — consistent shape for callers.
+  await report.populate('identifier');
+  await report.populate('reporter', 'name email');
+
+  return report.toAdminJSON();
+}
