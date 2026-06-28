@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { validate } from '../middleware/validate.js';
+import { authenticate } from '../middleware/authenticate.js';
 import { signupSchema, loginSchema } from '../validators/auth.validator.js';
 import * as authController from '../controllers/auth.controller.js';
-import { ApiError } from '../utils/apiResponse.js';
+import { ApiError, sendSuccess } from '../utils/apiResponse.js';
 
 const router = Router();
 
@@ -58,5 +59,17 @@ router.post(
   validate(loginSchema),
   authController.login,
 );
+
+// ---------------------------------------------------------------------------
+// TEMPORARY — Sprint 2 verification only. Remove after testing.
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /api/v1/auth/me
+ * Returns the decoded token payload attached by authenticate middleware.
+ */
+router.get('/me', authenticate, (req, res) => {
+  return sendSuccess(res, { statusCode: 200, data: { user: req.user } });
+});
 
 export default router;
