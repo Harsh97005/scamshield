@@ -35,3 +35,21 @@ export async function getPendingReports(req, res, next) {
     return next(err);
   }
 }
+
+/**
+ * GET /api/v1/admin/reports/:reportId
+ * API Contract §8.2 — Admin only.
+ *
+ * Returns full report detail including adminNotes.
+ * Malformed ObjectId → 400 via global CastError handler (Sprint 1).
+ * Non-existent reportId → 404 via ApiError thrown in service.
+ */
+export async function getPendingReportById(req, res, next) {
+  try {
+    const result = await adminReportService.getPendingReportById(req.params.reportId);
+
+    return sendSuccess(res, { statusCode: 200, data: result });
+  } catch (err) {
+    return next(err);
+  }
+}

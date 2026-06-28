@@ -1,4 +1,5 @@
 import { Report } from '../models/Report.js';
+import { ApiError } from '../utils/apiResponse.js';
 import { REPORT_STATUSES } from '../constants/reports.js';
 
 /**
@@ -75,4 +76,41 @@ export async function getPendingReports({ page, limit }) {
       hasPrev:    pageNum > 1,
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// getPendingReportById
+// API Contract §8.2  GET /admin/reports/:reportId
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch a single report by ID for admin review.
+ *
+ * Unlike the public getReportById() in report.service.js, this function:
+ *  - Populates identifier and reporter (name + email only).
+ *  - Explicitly selects adminNotes (+adminNotes) — admins are permitted
+ *    to view moderator notes on individual reports.
+ *  - Uses toAdminJSON() so adminNotes is included in the returned object.
+ *
+ * No status filtering — admins can fetch any report regardless of status
+ * to support review of approved/rejected history as well as pending queue.
+ *
+ * reporter projection: 'name email' — passwordHash and all other User
+ * fields are excluded at the query level.
+ *
+ * @param {string} reportId — MongoDB ObjectId string
+ * @returns {Promise<object>} report.toAdminJSON() result
+ * @throws {ApiError} 404 NOT_FOUND if the report does not exist
+ */
+export async function getPendingReportById(reportId) {
+  const report = await Report.findById(reportId)
+    .select('+adminNotes')
+    .populate('identifier')
+    .populate('reporter', 'name email');
+
+  if (!report) {
+    throw new ApiError(404, 'NOT_FOUND', 'Report not found');
+  }
+
+  return report.toAdminJSON();
 }
